@@ -8,17 +8,17 @@ use core::fmt;
 
 /// List of instructions (usually inside a block section).
 #[derive(Debug, Clone, PartialEq)]
-pub struct Instructions(Vec<Instruction>);
+pub struct Instructions(Vec<Instruction>, Vec<u64>);
 
 impl Instructions {
 	/// New list of instructions from vector of instructions.
-	pub fn new(elements: Vec<Instruction>) -> Self {
-		Instructions(elements)
+	pub fn new(elements: Vec<Instruction>, offsets: Vec<u64>) -> Self {
+		Instructions(elements, offsets)
 	}
 
 	/// Empty expression with only `Instruction::End` instruction.
 	pub fn empty() -> Self {
-		Instructions(vec![Instruction::End])
+		Instructions(vec![Instruction::End], vec![0])
 	}
 
 	/// List of individual instructions.
@@ -30,16 +30,23 @@ impl Instructions {
 	pub fn elements_mut(&mut self) -> &mut Vec<Instruction> {
 		&mut self.0
 	}
+
+	/// Instruction offsets
+	pub fn offsets(&self) -> &[u64] {
+		&self.1
+	}
 }
 
 impl Deserialize for Instructions {
 	type Error = Error;
 
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+	fn deserialize<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, Self::Error> {
+		let mut offsets = Vec::new();
 		let mut instructions = Vec::new();
 		let mut block_count = 1usize;
 
 		loop {
+			let current_offset = reader.stream_position().unwrap();
 			let instruction = Instruction::deserialize(reader)?;
 			if instruction.is_terminal() {
 				block_count -= 1;
@@ -48,13 +55,14 @@ impl Deserialize for Instructions {
 					block_count.checked_add(1).ok_or(Error::Other("too many instructions"))?;
 			}
 
+			offsets.push(current_offset);
 			instructions.push(instruction);
 			if block_count == 0 {
-				break
+				break;
 			}
 		}
 
-		Ok(Instructions(instructions))
+		Ok(Instructions(instructions, offsets))
 	}
 }
 
@@ -89,7 +97,7 @@ impl InitExpr {
 impl Deserialize for InitExpr {
 	type Error = Error;
 
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+	fn deserialize<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, Self::Error> {
 		let mut instructions = Vec::new();
 
 		loop {
@@ -97,7 +105,7 @@ impl Deserialize for InitExpr {
 			let is_terminal = instruction.is_terminal();
 			instructions.push(instruction);
 			if is_terminal {
-				break
+				break;
 			}
 		}
 
@@ -1052,8 +1060,9 @@ pub mod opcodes {
 impl Deserialize for Instruction {
 	type Error = Error;
 
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
-		use self::{opcodes::*, Instruction::*};
+	fn deserialize<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, Self::Error> {
+		use self::opcodes::*;
+		use self::Instruction::*;
 
 		#[cfg(feature = "sign_ext")]
 		use self::opcodes::sign_ext::*;
@@ -1089,7 +1098,7 @@ impl Deserialize for Instruction {
 				let signature: u32 = VarUint32::deserialize(reader)?.into();
 				let table_ref: u8 = Uint8::deserialize(reader)?.into();
 				if table_ref != 0 {
-					return Err(Error::InvalidTableReference(table_ref))
+					return Err(Error::InvalidTableReference(table_ref));
 				}
 
 				CallIndirect(signature, table_ref)
@@ -1221,14 +1230,14 @@ impl Deserialize for Instruction {
 			CURRENTMEMORY => {
 				let mem_ref: u8 = Uint8::deserialize(reader)?.into();
 				if mem_ref != 0 {
-					return Err(Error::InvalidMemoryReference(mem_ref))
+					return Err(Error::InvalidMemoryReference(mem_ref));
 				}
 				CurrentMemory(mem_ref)
 			},
 			GROWMEMORY => {
 				let mem_ref: u8 = Uint8::deserialize(reader)?.into();
 				if mem_ref != 0 {
-					return Err(Error::InvalidMemoryReference(mem_ref))
+					return Err(Error::InvalidMemoryReference(mem_ref));
 				}
 				GrowMemory(mem_ref)
 			},
@@ -1393,7 +1402,7 @@ impl Deserialize for Instruction {
 }
 
 #[cfg(feature = "atomics")]
-fn deserialize_atomic<R: io::Read>(reader: &mut R) -> Result<Instruction, Error> {
+fn deserialize_atomic<R: io::Read + io::Seek>(reader: &mut R) -> Result<Instruction, Error> {
 	use self::{opcodes::atomics::*, AtomicsInstruction::*};
 
 	let val: u8 = Uint8::deserialize(reader)?.into();
@@ -1479,7 +1488,7 @@ fn deserialize_atomic<R: io::Read>(reader: &mut R) -> Result<Instruction, Error>
 }
 
 #[cfg(feature = "simd")]
-fn deserialize_simd<R: io::Read>(reader: &mut R) -> Result<Instruction, Error> {
+fn deserialize_simd<R: io::Read + io::Seek>(reader: &mut R) -> Result<Instruction, Error> {
 	use self::{opcodes::simd::*, SimdInstruction::*};
 
 	let val = VarUint32::deserialize(reader)?.into();
@@ -1650,41 +1659,41 @@ fn deserialize_simd<R: io::Read>(reader: &mut R) -> Result<Instruction, Error> {
 }
 
 #[cfg(feature = "bulk")]
-fn deserialize_bulk<R: io::Read>(reader: &mut R) -> Result<Instruction, Error> {
+fn deserialize_bulk<R: io::Read + io::Seek>(reader: &mut R) -> Result<Instruction, Error> {
 	use self::{opcodes::bulk::*, BulkInstruction::*};
 
 	let val: u8 = Uint8::deserialize(reader)?.into();
 	Ok(Instruction::Bulk(match val {
 		MEMORY_INIT => {
 			if u8::from(Uint8::deserialize(reader)?) != 0 {
-				return Err(Error::UnknownOpcode(val))
+				return Err(Error::UnknownOpcode(val));
 			}
 			MemoryInit(VarUint32::deserialize(reader)?.into())
 		},
 		MEMORY_DROP => MemoryDrop(VarUint32::deserialize(reader)?.into()),
 		MEMORY_FILL => {
 			if u8::from(Uint8::deserialize(reader)?) != 0 {
-				return Err(Error::UnknownOpcode(val))
+				return Err(Error::UnknownOpcode(val));
 			}
 			MemoryFill
 		},
 		MEMORY_COPY => {
 			if u8::from(Uint8::deserialize(reader)?) != 0 {
-				return Err(Error::UnknownOpcode(val))
+				return Err(Error::UnknownOpcode(val));
 			}
 			MemoryCopy
 		},
 
 		TABLE_INIT => {
 			if u8::from(Uint8::deserialize(reader)?) != 0 {
-				return Err(Error::UnknownOpcode(val))
+				return Err(Error::UnknownOpcode(val));
 			}
 			TableInit(VarUint32::deserialize(reader)?.into())
 		},
 		TABLE_DROP => TableDrop(VarUint32::deserialize(reader)?.into()),
 		TABLE_COPY => {
 			if u8::from(Uint8::deserialize(reader)?) != 0 {
-				return Err(Error::UnknownOpcode(val))
+				return Err(Error::UnknownOpcode(val));
 			}
 			TableCopy
 		},
@@ -1697,7 +1706,7 @@ fn deserialize_bulk<R: io::Read>(reader: &mut R) -> Result<Instruction, Error> {
 impl Deserialize for MemArg {
 	type Error = Error;
 
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+	fn deserialize<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, Self::Error> {
 		let align = Uint8::deserialize(reader)?;
 		let offset = VarUint32::deserialize(reader)?;
 		Ok(MemArg { align: align.into(), offset: offset.into() })

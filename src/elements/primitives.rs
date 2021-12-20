@@ -542,7 +542,7 @@ impl Serialize for VarUint1 {
 impl Deserialize for String {
 	type Error = Error;
 
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+	fn deserialize<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, Self::Error> {
 		let length = u32::from(VarUint32::deserialize(reader)?) as usize;
 		if length > 0 {
 			String::from_utf8(buffered_read!(PRIMITIVES_BUFFER_LENGTH, length, reader))
@@ -581,7 +581,7 @@ where
 {
 	type Error = T::Error;
 
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+	fn deserialize<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, Self::Error> {
 		let count: usize = VarUint32::deserialize(reader)?.into();
 		let mut result = Vec::new();
 		for _ in 0..count {

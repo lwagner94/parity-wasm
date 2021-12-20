@@ -150,7 +150,7 @@ impl<T> IndexMap<T> {
 		rdr: &mut R,
 	) -> Result<IndexMap<T>, Error>
 	where
-		R: io::Read,
+		R: io::Read + io::Seek,
 		F: Fn(u32, &mut R) -> Result<T, Error>,
 	{
 		let len: u32 = VarUint32::deserialize(rdr)?.into();
@@ -159,13 +159,13 @@ impl<T> IndexMap<T> {
 		for _ in 0..len {
 			let idx: u32 = VarUint32::deserialize(rdr)?.into();
 			if idx as usize >= max_entry_space {
-				return Err(Error::Other("index is larger than expected"))
+				return Err(Error::Other("index is larger than expected"));
 			}
 			match prev_idx {
 				Some(prev) if prev >= idx => {
 					// Supposedly these names must be "sorted by index", so
 					// let's try enforcing that and seeing what happens.
-					return Err(Error::Other("indices are out of order"))
+					return Err(Error::Other("indices are out of order"));
 				},
 				_ => {
 					prev_idx = Some(idx);
@@ -239,14 +239,14 @@ impl<T> Iterator for IntoIter<T> {
 		// from repeatedly calling `self.iter.next()` once it has been
 		// exhausted, which is not guaranteed to keep returning `None`.
 		if self.remaining_len == 0 {
-			return None
+			return None;
 		}
 		for value_opt in &mut self.iter {
 			let idx = self.next_idx;
 			self.next_idx += 1;
 			if let Some(value) = value_opt {
 				self.remaining_len -= 1;
-				return Some((idx, value))
+				return Some((idx, value));
 			}
 		}
 		debug_assert_eq!(self.remaining_len, 0);
@@ -282,14 +282,14 @@ impl<'a, T: 'static> Iterator for Iter<'a, T> {
 		// from repeatedly calling `self.iter.next()` once it has been
 		// exhausted, which is not guaranteed to keep returning `None`.
 		if self.remaining_len == 0 {
-			return None
+			return None;
 		}
 		for value_opt in &mut self.iter {
 			let idx = self.next_idx;
 			self.next_idx += 1;
 			if let Some(ref value) = *value_opt {
 				self.remaining_len -= 1;
-				return Some((idx, value))
+				return Some((idx, value));
 			}
 		}
 		debug_assert_eq!(self.remaining_len, 0);
@@ -331,7 +331,10 @@ where
 	/// Deserialize a map containing simple values that support `Deserialize`.
 	/// We will allocate an underlying array no larger than `max_entry_space` to
 	/// hold the data, so the maximum index must be less than `max_entry_space`.
-	pub fn deserialize<R: io::Read>(max_entry_space: usize, rdr: &mut R) -> Result<Self, Error> {
+	pub fn deserialize<R: io::Read + io::Seek>(
+		max_entry_space: usize,
+		rdr: &mut R,
+	) -> Result<Self, Error> {
 		let deserialize_value: fn(u32, &mut R) -> Result<T, Error> =
 			|_idx, rdr| T::deserialize(rdr).map_err(Error::from);
 		Self::deserialize_with(max_entry_space, &deserialize_value, rdr)

@@ -15,7 +15,7 @@ pub enum Type {
 impl Deserialize for Type {
 	type Error = Error;
 
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+	fn deserialize<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, Self::Error> {
 		Ok(Type::Function(FunctionType::deserialize(reader)?))
 	}
 }
@@ -49,7 +49,7 @@ pub enum ValueType {
 impl Deserialize for ValueType {
 	type Error = Error;
 
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+	fn deserialize<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, Self::Error> {
 		let val = VarInt7::deserialize(reader)?;
 
 		match val.into() {
@@ -110,7 +110,7 @@ pub enum BlockType {
 impl Deserialize for BlockType {
 	type Error = Error;
 
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+	fn deserialize<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, Self::Error> {
 		let val = VarInt32::deserialize(reader)?;
 
 		match val.into() {
@@ -197,11 +197,11 @@ impl FunctionType {
 impl Deserialize for FunctionType {
 	type Error = Error;
 
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+	fn deserialize<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, Self::Error> {
 		let form: u8 = VarUint7::deserialize(reader)?.into();
 
 		if form != 0x60 {
-			return Err(Error::UnknownFunctionForm(form))
+			return Err(Error::UnknownFunctionForm(form));
 		}
 
 		let params: Vec<ValueType> = CountedList::deserialize(reader)?.into_inner();
@@ -211,7 +211,7 @@ impl Deserialize for FunctionType {
 		if results.len() > 1 {
 			return Err(Error::Other(
 				"Enable the multi_value feature to deserialize more than one function result",
-			))
+			));
 		}
 
 		Ok(FunctionType { form, params, results })
@@ -250,7 +250,7 @@ pub enum TableElementType {
 impl Deserialize for TableElementType {
 	type Error = Error;
 
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+	fn deserialize<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, Self::Error> {
 		let val = VarInt7::deserialize(reader)?;
 
 		match val.into() {
