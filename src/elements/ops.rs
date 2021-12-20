@@ -57,7 +57,6 @@ impl Deserialize for Instructions {
 				break;
 			}
 		}
-		dbg!(&offsets);
 
 		Ok(Instructions(instructions, offsets))
 	}
