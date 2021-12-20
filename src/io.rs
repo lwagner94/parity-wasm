@@ -32,6 +32,8 @@ pub trait Write {
 	fn write(&mut self, buf: &[u8]) -> Result<()>;
 }
 
+pub use std::io::Seek;
+
 pub trait Read {
 	/// Read a data from this read to a buffer.
 	///
@@ -39,38 +41,40 @@ pub trait Read {
 	fn read(&mut self, buf: &mut [u8]) -> Result<()>;
 }
 
+pub use std::io::Cursor;
+
 /// Reader that saves the last position.
-pub struct Cursor<T> {
-	inner: T,
-	pos: usize,
-}
+// pub struct Cursor<T> {
+// 	inner: T,
+// 	pos: usize,
+// }
 
-impl<T> Cursor<T> {
-	pub fn new(inner: T) -> Cursor<T> {
-		Cursor {
-			inner,
-			pos: 0,
-		}
-	}
+// impl<T> Cursor<T> {
+// 	pub fn new(inner: T) -> Cursor<T> {
+// 		Cursor {
+// 			inner,
+// 			pos: 0,
+// 		}
+// 	}
 
-	pub fn position(&self) -> usize {
-		self.pos
-	}
-}
+// 	pub fn position(&self) -> usize {
+// 		self.pos
+// 	}
+// }
 
-impl<T: AsRef<[u8]>> Read for Cursor<T> {
-	fn read(&mut self, buf: &mut [u8]) -> Result<()> {
-		let slice = self.inner.as_ref();
-		let remainder = slice.len() - self.pos;
-		let requested = buf.len();
-		if requested > remainder {
-			return Err(Error::UnexpectedEof);
-		}
-		buf.copy_from_slice(&slice[self.pos..(self.pos + requested)]);
-		self.pos += requested;
-		Ok(())
-	}
-}
+// impl<T: AsRef<[u8]>> Read for Cursor<T> {
+// 	fn read(&mut self, buf: &mut [u8]) -> Result<()> {
+// 		let slice = self.inner.as_ref();
+// 		let remainder = slice.len() - self.pos;
+// 		let requested = buf.len();
+// 		if requested > remainder {
+// 			return Err(Error::UnexpectedEof);
+// 		}
+// 		buf.copy_from_slice(&slice[self.pos..(self.pos + requested)]);
+// 		self.pos += requested;
+// 		Ok(())
+// 	}
+// }
 
 #[cfg(not(feature = "std"))]
 impl Write for alloc::vec::Vec<u8> {

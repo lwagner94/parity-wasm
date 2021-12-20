@@ -450,7 +450,7 @@ impl Module {
 							Ok(reloc_section) => reloc_section,
 							Err(e) => { parse_errors.push((i, e)); continue; }
 						};
-						if rdr.position() != custom.payload().len() {
+						if rdr.position() as usize != custom.payload().len() {
 							parse_errors.push((i, io::Error::InvalidData.into()));
 							continue;
 						}
@@ -517,7 +517,7 @@ impl Module {
 impl Deserialize for Module {
 	type Error = super::Error;
 
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+	fn deserialize<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, Self::Error> {
 		let mut sections = Vec::new();
 
 		let mut magic = [0u8; 4];
@@ -601,6 +601,12 @@ impl<'a> io::Read for PeekSection<'a> {
 		self.cursor += available;
 		Ok(())
 	}
+}
+
+impl<'a> io::Seek for PeekSection<'a> {
+    fn seek(&mut self, _pos: std::io::SeekFrom) -> std::io::Result<u64> {
+        todo!()
+    }
 }
 
 /// Returns size of the module in the provided stream.
@@ -952,9 +958,9 @@ mod integration_tests {
         // Duplicate.
         assert!(module.insert_section(Section::Export(ExportSection::with_entries(vec![]))).is_err());
 
-        assert!(module.insert_section(Section::Code(CodeSection::with_bodies(vec![]))).is_ok());
+        assert!(module.insert_section(Section::Code(CodeSection::with_bodies(vec![], 0))).is_ok());
         // Duplicate.
-        assert!(module.insert_section(Section::Code(CodeSection::with_bodies(vec![]))).is_err());
+        assert!(module.insert_section(Section::Code(CodeSection::with_bodies(vec![], 0))).is_err());
 
         // Try serialisation roundtrip to check well-orderedness.
         let serialized = serialize(module).expect("serialization to succeed");

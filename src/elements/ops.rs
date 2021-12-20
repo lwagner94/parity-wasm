@@ -10,17 +10,17 @@ use core::fmt;
 
 /// List of instructions (usually inside a block section).
 #[derive(Debug, Clone, PartialEq)]
-pub struct Instructions(Vec<Instruction>);
+pub struct Instructions(Vec<Instruction>, Vec<u64>);
 
 impl Instructions {
 	/// New list of instructions from vector of instructions.
-	pub fn new(elements: Vec<Instruction>) -> Self {
-		Instructions(elements)
+	pub fn new(elements: Vec<Instruction>, offsets: Vec<u64>) -> Self {
+		Instructions(elements, offsets)
 	}
 
 	/// Empty expression with only `Instruction::End` instruction.
 	pub fn empty() -> Self {
-		Instructions(vec![Instruction::End])
+		Instructions(vec![Instruction::End], vec![0])
 	}
 
 	/// List of individual instructions.
@@ -28,16 +28,22 @@ impl Instructions {
 
 	/// Individual instructions, mutable.
 	pub fn elements_mut(&mut self) -> &mut Vec<Instruction> { &mut self.0 }
+
+	/// Instruction offsets
+	pub fn offsets(&self) -> &[u64] {&self.1}
 }
 
 impl Deserialize for Instructions {
 	type Error = Error;
 
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+	fn deserialize<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, Self::Error> {
+
+		let mut offsets = Vec::new();
 		let mut instructions = Vec::new();
 		let mut block_count = 1usize;
 
 		loop {
+			let current_offset = reader.stream_position().unwrap();
 			let instruction = Instruction::deserialize(reader)?;
 			if instruction.is_terminal() {
 				block_count -= 1;
@@ -45,13 +51,15 @@ impl Deserialize for Instructions {
 				block_count = block_count.checked_add(1).ok_or(Error::Other("too many instructions"))?;
 			}
 
+			offsets.push(current_offset);
 			instructions.push(instruction);
 			if block_count == 0 {
 				break;
 			}
 		}
+		dbg!(&offsets);
 
-		Ok(Instructions(instructions))
+		Ok(Instructions(instructions, offsets))
 	}
 }
 
@@ -86,7 +94,7 @@ impl InitExpr {
 impl Deserialize for InitExpr {
 	type Error = Error;
 
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+	fn deserialize<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, Self::Error> {
 		let mut instructions = Vec::new();
 
 		loop {
@@ -1055,7 +1063,7 @@ pub mod opcodes {
 impl Deserialize for Instruction {
 	type Error = Error;
 
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+	fn deserialize<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, Self::Error> {
 		use self::Instruction::*;
 		use self::opcodes::*;
 

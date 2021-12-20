@@ -83,7 +83,7 @@ pub enum Section {
 impl Deserialize for Section {
 	type Error = Error;
 
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+	fn deserialize<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, Self::Error> {
 		let id = match VarUint7::deserialize(reader) {
 			// todo: be more selective detecting no more section
 			Err(_) => { return Err(Error::UnexpectedEof); },
@@ -253,10 +253,13 @@ impl Section {
 pub(crate) struct SectionReader {
 	cursor: io::Cursor<Vec<u8>>,
 	declared_length: usize,
+	offset: u64,
 }
 
 impl SectionReader {
-	pub fn new<R: io::Read>(reader: &mut R) -> Result<Self, elements::Error> {
+	pub fn new<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, elements::Error> {
+		let offset = 
+			reader.stream_position().map_err(|_| elements::Error::Other("stream_position failed"))?;
 		let length = u32::from(VarUint32::deserialize(reader)?) as usize;
 		let inner_buffer = buffered_read!(ENTRIES_BUFFER_LENGTH, length, reader);
 		let buf_length = inner_buffer.len();
@@ -265,6 +268,7 @@ impl SectionReader {
 		Ok(SectionReader {
 			cursor: cursor,
 			declared_length: buf_length,
+			offset
 		})
 	}
 
@@ -272,7 +276,7 @@ impl SectionReader {
 		let cursor = self.cursor;
 		let buf_length = self.declared_length;
 
-		if cursor.position() != buf_length {
+		if cursor.position() as usize != buf_length {
 			Err(io::Error::InvalidData)
 		} else {
 			Ok(())
@@ -287,7 +291,13 @@ impl io::Read for SectionReader {
 	}
 }
 
-fn read_entries<R: io::Read, T: Deserialize<Error=elements::Error>>(reader: &mut R)
+impl io::Seek for SectionReader {
+    fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
+        self.cursor.seek(pos).map(|pos| pos + self.offset)
+    }
+}
+
+fn read_entries<R: io::Read + io::Seek, T: Deserialize<Error=elements::Error>>(reader: &mut R)
 	-> Result<Vec<T>, elements::Error>
 {
 	let mut section_reader = SectionReader::new(reader)?;
@@ -333,7 +343,7 @@ impl CustomSection {
 impl Deserialize for CustomSection {
 	type Error = Error;
 
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+	fn deserialize<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, Self::Error> {
 		let section_length: usize = u32::from(VarUint32::deserialize(reader)?) as usize;
 		let buf = buffered_read!(ENTRIES_BUFFER_LENGTH, section_length, reader);
 		let mut cursor = io::Cursor::new(&buf[..]);
@@ -381,7 +391,7 @@ impl TypeSection {
 impl Deserialize for TypeSection {
 	type Error = Error;
 
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+	fn deserialize<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, Self::Error> {
 		Ok(TypeSection(read_entries(reader)?))
 	}
 }
@@ -440,7 +450,7 @@ impl ImportSection {
 impl Deserialize for ImportSection {
 	type Error = Error;
 
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+	fn deserialize<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, Self::Error> {
 		Ok(ImportSection(read_entries(reader)?))
 	}
 }
@@ -485,7 +495,7 @@ impl FunctionSection {
 impl Deserialize for FunctionSection {
 	type Error = Error;
 
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+	fn deserialize<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, Self::Error> {
 		Ok(FunctionSection(read_entries(reader)?))
 	}
 }
@@ -530,7 +540,7 @@ impl TableSection {
 impl Deserialize for TableSection {
 	type Error = Error;
 
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+	fn deserialize<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, Self::Error> {
 		Ok(TableSection(read_entries(reader)?))
 	}
 }
@@ -575,7 +585,7 @@ impl MemorySection {
 impl Deserialize for MemorySection {
 	type Error = Error;
 
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+	fn deserialize<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, Self::Error> {
 		Ok(MemorySection(read_entries(reader)?))
 	}
 }
@@ -620,7 +630,7 @@ impl GlobalSection {
 impl Deserialize for GlobalSection {
 	type Error = Error;
 
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+	fn deserialize<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, Self::Error> {
 		Ok(GlobalSection(read_entries(reader)?))
 	}
 }
@@ -665,7 +675,7 @@ impl ExportSection {
 impl Deserialize for ExportSection {
 	type Error = Error;
 
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+	fn deserialize<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, Self::Error> {
 		Ok(ExportSection(read_entries(reader)?))
 	}
 }
@@ -688,12 +698,12 @@ impl Serialize for ExportSection {
 
 /// Section with function bodies of the module.
 #[derive(Default, Debug, Clone, PartialEq)]
-pub struct CodeSection(Vec<FuncBody>);
+pub struct CodeSection(Vec<FuncBody>, u64);
 
 impl CodeSection {
 	/// New code section with specified function bodies.
-	pub fn with_bodies(bodies: Vec<FuncBody>) -> Self {
-		CodeSection(bodies)
+	pub fn with_bodies(bodies: Vec<FuncBody>, offset: u64) -> Self {
+		CodeSection(bodies, offset)
 	}
 
 	/// All function bodies in the section.
@@ -705,13 +715,19 @@ impl CodeSection {
 	pub fn bodies_mut(&mut self) -> &mut Vec<FuncBody> {
 		&mut self.0
 	}
+
+	/// Offset of the code section
+	pub fn offset(&self) -> u64 {
+		self.1
+	}
 }
 
 impl Deserialize for CodeSection {
 	type Error = Error;
 
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
-		Ok(CodeSection(read_entries(reader)?))
+	fn deserialize<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, Self::Error> {
+		let offset = reader.stream_position().unwrap(); // TODO
+		Ok(CodeSection(read_entries(reader)?, offset))
 	}
 }
 
@@ -755,7 +771,7 @@ impl ElementSection {
 impl Deserialize for ElementSection {
 	type Error = Error;
 
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+	fn deserialize<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, Self::Error> {
 		Ok(ElementSection(read_entries(reader)?))
 	}
 }
@@ -800,7 +816,7 @@ impl DataSection {
 impl Deserialize for DataSection {
 	type Error = Error;
 
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+	fn deserialize<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, Self::Error> {
 		Ok(DataSection(read_entries(reader)?))
 	}
 }
@@ -1121,9 +1137,9 @@ mod tests {
 						GetGlobal(0),
 						End,
 						End,
-					])
+					], vec![0u64; 4])
 				)
-			]);
+			], 0);
 
 		let buf = serialize(code_section).expect("Code section to be serialized");
 

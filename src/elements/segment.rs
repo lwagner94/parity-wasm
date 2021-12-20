@@ -77,7 +77,7 @@ impl Deserialize for ElementSegment {
 	type Error = Error;
 
 	#[cfg(not(feature="bulk"))]
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+	fn deserialize<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, Self::Error> {
 		let index: u32 = VarUint32::deserialize(reader)?.into();
 		let offset = InitExpr::deserialize(reader)?;
 		let members: Vec<u32> = CountedList::<VarUint32>::deserialize(reader)?
@@ -219,7 +219,7 @@ impl Deserialize for DataSegment {
 	type Error = Error;
 
 	#[cfg(not(feature="bulk"))]
-	fn deserialize<R: io::Read>(reader: &mut R) -> Result<Self, Self::Error> {
+	fn deserialize<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, Self::Error> {
 		let index = VarUint32::deserialize(reader)?;
 		let offset = InitExpr::deserialize(reader)?;
 		let value_len = u32::from(VarUint32::deserialize(reader)?) as usize;

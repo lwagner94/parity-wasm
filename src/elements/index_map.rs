@@ -153,7 +153,7 @@ impl<T> IndexMap<T> {
 		rdr: &mut R,
 	) -> Result<IndexMap<T>, Error>
 	where
-		R: io::Read,
+		R: io::Read + io::Seek,
 		F: Fn(u32, &mut R) -> Result<T, Error>,
 	{
 		let len: u32 = VarUint32::deserialize(rdr)?.into();
@@ -346,7 +346,7 @@ where
 	/// Deserialize a map containing simple values that support `Deserialize`.
 	/// We will allocate an underlying array no larger than `max_entry_space` to
 	/// hold the data, so the maximum index must be less than `max_entry_space`.
-	pub fn deserialize<R: io::Read>(
+	pub fn deserialize<R: io::Read + io::Seek>(
 		max_entry_space: usize,
 		rdr: &mut R,
 	) -> Result<Self, Error> {
