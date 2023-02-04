@@ -1,8 +1,8 @@
 # wasmut-wasm
 
-Low-level WebAssembly format library.
+Low-level WebAssembly format library. This is a fork of [paritytech/parity-wasm](https://github.com/paritytech/parity-wasm) and has been enhanced specifically for
+[wasmut](https://github.com/lwagner94/wasmut).
 
-[![Build Status](https://travis-ci.org/wasmuttech/wasmut-wasm.svg?branch=master)](https://travis-ci.org/wasmuttech/wasmut-wasm)
 [![crates.io link](https://img.shields.io/crates/v/wasmut-wasm.svg)](https://crates.io/crates/wasmut-wasm)
 
 [Documentation](https://docs.rs/wasmut-wasm)
