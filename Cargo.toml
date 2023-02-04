@@ -1,12 +1,12 @@
 [package]
-name = "parity-wasm"
+name = "wasmut-wasm"
 version = "0.45.0"
-authors = ["Nikolay Volf <nikvolf@gmail.com>", "Svyatoslav Nikolsky <svyatonik@yandex.ru>", "Sergey Shulepov <s.pepyakin@gmail.com>"]
+authors = ["Lukas Wagner <mail@lukaswagner.dev>", "Nikolay Volf <nikvolf@gmail.com>", "Svyatoslav Nikolsky <svyatonik@yandex.ru>", "Sergey Shulepov <s.pepyakin@gmail.com>"]
 license = "MIT/Apache-2.0"
 readme = "README.md"
-repository = "https://github.com/paritytech/parity-wasm"
-homepage = "https://github.com/paritytech/parity-wasm"
-documentation = "https://docs.rs/parity-wasm"
+repository = "https://github.com/lwagner94/wasmut-wasm"
+homepage = "https://github.com/lwagner94/wasmut-wasm"
+documentation = "https://docs.rs/wasmut-wasm"
 description = "WebAssembly low-level format library"
 keywords = ["wasm", "webassembly", "bytecode", "serde", "interpreter"]
 categories = ["wasm", "parser-implementations"]

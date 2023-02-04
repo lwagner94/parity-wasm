@@ -1,6 +1,6 @@
 
 [package]
-name = "parity-wasm-fuzz"
+name = "wasmut-wasm-fuzz"
 version = "0.0.1"
 authors = ["Pat Hickey phickey@fastly.com"]
 publish = false
@@ -13,7 +13,7 @@ cargo-fuzz = true
 [dependencies.binaryen]
 version = "0.3.0"
 
-[dependencies.parity-wasm]
+[dependencies.wasmut-wasm]
 path = ".."
 [dependencies.libfuzzer-sys]
 git = "https://github.com/rust-fuzz/libfuzzer-sys.git"
